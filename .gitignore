@@ -1,0 +1,9 @@
+target/
+
+# Variáveis locais (o modelo versionado é o .env.example)
+.env
+
+.idea/
+*.iml
+.vscode/
+.DS_Store
