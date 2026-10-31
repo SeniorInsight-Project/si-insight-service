@@ -1,0 +1,12 @@
+# O build só precisa do pom.xml e de src/.
+target/
+.git/
+.github/
+.idea/
+.vscode/
+*.iml
+.env
+.env.*
+*.md
+Dockerfile
+.dockerignore
