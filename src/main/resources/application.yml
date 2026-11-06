@@ -1,0 +1,75 @@
+# Sem segredos aqui: credenciais e endereços vêm de variáveis de ambiente (ver .env.example).
+spring:
+  application:
+    name: insight-service
+
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:seniorinsight}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    hikari:
+      # search_path da conexão: JPA, SQL nativo e Flyway enxergam só o schema do serviço.
+      schema: insight
+
+  flyway:
+    schemas: insight
+    default-schema: insight
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME}
+    password: ${RABBITMQ_PASSWORD}
+    virtual-host: ${RABBITMQ_VHOST:/}
+    publisher-confirm-type: correlated
+    listener:
+      simple:
+        # O consumidor confirma (ack) só depois do commit; rejeição vai para a dead-letter, sem requeue.
+        acknowledge-mode: manual
+        default-requeue-rejected: false
+        prefetch: 10
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI}
+
+server:
+  port: ${SERVER_PORT:8080}
+  # O serviço fica atrás do API Gateway: respeita X-Forwarded-* (host, proto, prefix) nas URLs geradas.
+  forward-headers-strategy: framework
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+insight:
+  outbox:
+    relay:
+      intervalo: PT1S
+      tamanho-lote: 100
+      timeout-confirmacao: PT5S
+  semaforo:
+    ttl: PT15M
+  gemini:
+    # Só por variável de ambiente (Secret Manager em produção). Vazia: o adaptador recusa a chamada.
+    api-key: ${GEMINI_API_KEY:}
+    modelo: ${GEMINI_MODEL:gemini-2.5-flash}
