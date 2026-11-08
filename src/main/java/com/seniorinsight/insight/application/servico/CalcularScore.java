@@ -25,6 +25,7 @@ import com.seniorinsight.insight.application.porta.saida.ScoreRepositorio.Score;
 import com.seniorinsight.insight.application.porta.saida.ScoreRepositorio.Trabalho;
 import com.seniorinsight.insight.domain.evento.FaixaScoreAlterada;
 import com.seniorinsight.insight.domain.semaforo.MedidasScore;
+import com.seniorinsight.insight.domain.semaforo.MedidasScore.Agregado;
 import com.seniorinsight.insight.domain.semaforo.RegrasScore;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
@@ -81,7 +82,7 @@ public class CalcularScore {
                 || teto <= 0 || precoEntrada <= 0 || precoSaida <= 0) {
             return;
         }
-        var prompt = scores.promptAprovado().filter(p -> p.conteudo().strip().equals(promptVersionado));
+        var prompt = scores.promptAprovado(modelo).filter(p -> p.conteudo().strip().equals(promptVersionado));
         if (prompt.isEmpty()) {
             return;
         }
@@ -91,8 +92,7 @@ public class CalcularScore {
         }
 
         var evidencias = MedidasScore.explicacoes(contexto.agregados());
-        String dados = serializar(Map.of("perfil", perfil.get(), "agregados", contexto.agregados(),
-                "fatoresPermitidos", evidencias.keySet()));
+        String dados = serializar(new EntradaIa(perfil.get(), contexto.agregados(), List.copyOf(evidencias.keySet())));
         String conteudo = promptVersionado + "\n" + dados;
         int bytes = conteudo.getBytes(StandardCharsets.UTF_8).length;
         if (bytes > 64_000) {
@@ -160,7 +160,8 @@ public class CalcularScore {
             return null;
         }
         try {
-            var no = json.reader().with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+            var no = json.reader().with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS,
+                            DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
                     .readTree(resposta.conteudo());
             var valor = no.path("score");
             var fatores = no.path("fatores");
@@ -215,5 +216,8 @@ public class CalcularScore {
     }
 
     private record Saida(double valor, List<String> fatores) {
+    }
+
+    private record EntradaIa(PerfilScore.Perfil perfil, List<Agregado> agregados, List<String> fatoresPermitidos) {
     }
 }

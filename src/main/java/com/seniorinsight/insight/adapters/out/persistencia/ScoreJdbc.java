@@ -203,11 +203,11 @@ class ScoreJdbc implements ScoreRepositorio, ProjetarDadosScore {
     }
 
     @Override
-    public Optional<Prompt> promptAprovado() {
+    public Optional<Prompt> promptAprovado(String modelo) {
         return jdbc.query("""
                 SELECT id, conteudo FROM versao_prompt WHERE nome = 'score' AND versao = 1
-                    AND aprovado_em <= now() AND length(trim(aprovado_por)) > 0
-                """, (rs, row) -> new Prompt(rs.getObject(1, UUID.class), rs.getString(2))).stream().findFirst();
+                    AND aprovado_em <= now() AND length(trim(aprovado_por)) > 0 AND modelo_aprovado = ?
+                """, (rs, row) -> new Prompt(rs.getObject(1, UUID.class), rs.getString(2)), modelo).stream().findFirst();
     }
 
     @Override

@@ -24,7 +24,9 @@ Para integrar os serviços em homologação:
 - Billing envia `subscription.changed` com `time` e `data` contendo `familiarSub` (sub do Keycloak), `ativa` (Premium ou trial) e `expiraEm` (opcional para direito sem data de término).
 - Care atende `GET /internal/idosos/{id}/vinculo/{sub}` com o token do familiar e `GET /internal/idosos/{id}/contexto-score` com o token de serviço. O segundo endpoint deve fornecer somente `idade` e `comorbidades`. Configure `CARE_SERVICE_URL` e `INSIGHT_CARE_TOKEN_URL`, `INSIGHT_CARE_CLIENT_ID`, `INSIGHT_CARE_CLIENT_SECRET`.
 
-O job fica desligado por padrão. A versão em `src/main/resources/prompts/score-v1.txt` precisa corresponder ao registro `score`/1 em `versao_prompt` aprovado pelo consultor, com autoria e data. Para habilitar, configure `INSIGHT_GEMINI_ENABLED`, `GEMINI_API_KEY`, o teto diário em `INSIGHT_GEMINI_TETO_DIARIO_MICROS` e as tarifas por milhão de tokens em `INSIGHT_GEMINI_PRECO_ENTRADA` e `INSIGHT_GEMINI_PRECO_SAIDA`. Use a mesma moeda para teto e tarifas. Cada tentativa reserva o custo antes da chamada.
+O job fica desligado por padrão. A versão em `src/main/resources/prompts/score-v1.txt` precisa corresponder ao registro `score`/1 em `versao_prompt` aprovado pelo consultor, com autoria, data e `modelo_aprovado`. Para habilitar, configure `INSIGHT_GEMINI_ENABLED`, `GEMINI_API_KEY`, o teto diário em `INSIGHT_GEMINI_TETO_DIARIO_MICROS` e as tarifas por milhão de tokens em `INSIGHT_GEMINI_PRECO_ENTRADA` e `INSIGHT_GEMINI_PRECO_SAIDA`. Use a mesma moeda para teto e tarifas. Cada tentativa reserva o custo antes da chamada. O job antecipa um cálculo quando um novo agregado muda pelo menos 20% em relação à linha de base.
+
+Use a modalidade contratada que impede o uso dos dados enviados para treinamento, conforme RN-021.
 
 Parte do SeniorInsight — ver o Documento de Arquitetura de Software (seção 6) para as convenções.
 

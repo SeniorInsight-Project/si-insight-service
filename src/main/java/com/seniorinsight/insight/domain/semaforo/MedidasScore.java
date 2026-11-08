@@ -16,7 +16,8 @@ public final class MedidasScore {
 
     public static Map<String, String> explicacoes(List<Agregado> agregados) {
         var explicacoes = new TreeMap<String, String>();
-        LocalDate ultimoDia = agregados.stream().map(Agregado::dia).max(LocalDate::compareTo).orElse(null);
+        LocalDate ultimoDia = agregados.stream().filter(a -> a.horasComDados() >= 12)
+                .map(Agregado::dia).max(LocalDate::compareTo).orElse(null);
         for (Agregado a : agregados) {
             if (!a.dia().equals(ultimoDia) || a.linhaBase14Dias() == null || a.linhaBase14Dias() <= 0) {
                 continue;

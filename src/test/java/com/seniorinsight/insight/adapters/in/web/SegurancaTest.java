@@ -6,6 +6,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.util.UUID;
+
 import com.seniorinsight.insight.TesteIntegracao;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,22 +15,22 @@ import org.springframework.test.web.servlet.MockMvc;
 
 @TesteIntegracao
 class SegurancaTest {
+    private static final String SCORE = "/v1/idosos/" + UUID.randomUUID() + "/score-risco/recente";
 
     @Autowired
     MockMvc mvc;
 
     @Test
     void rotaDaApiSemTokenRetorna401() throws Exception {
-        mvc.perform(get("/v1/semaforo"))
+        mvc.perform(get(SCORE))
                 .andExpect(status().isUnauthorized())
                 .andExpect(header().string("WWW-Authenticate", "Bearer"));
     }
 
     @Test
-    void rotaDaApiComTokenPassaPelaSeguranca() throws Exception {
-        // Ainda não há endpoints: com token válido a requisição chega ao MVC e não é barrada (404, não 401/403).
-        mvc.perform(get("/v1/semaforo").with(jwt()))
-                .andExpect(status().isNotFound());
+    void scoreRecusaTokenSemDireitoPremiumOuTrial() throws Exception {
+        mvc.perform(get(SCORE).with(jwt().jwt(j -> j.subject(UUID.randomUUID().toString()))))
+                .andExpect(status().isForbidden());
     }
 
     @Test

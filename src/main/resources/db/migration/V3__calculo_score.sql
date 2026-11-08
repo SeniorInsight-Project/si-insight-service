@@ -2,6 +2,7 @@ ALTER TABLE score ADD COLUMN fatores JSONB NOT NULL DEFAULT '[]';
 ALTER TABLE score ADD COLUMN hash_dados CHAR(64);
 ALTER TABLE score ADD COLUMN revisao_consentimento BIGINT NOT NULL DEFAULT 0;
 ALTER TABLE chamada_ia ADD COLUMN custo_micros BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE versao_prompt ADD COLUMN modelo_aprovado VARCHAR(100);
 
 CREATE TABLE consentimento_score (
     idoso_id UUID NOT NULL,

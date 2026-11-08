@@ -55,7 +55,7 @@ class CalcularScoreTest {
                 new Agregado(LocalDate.parse("2026-11-04"), "steps", 5_000, 5_000.0, 12),
                 new Agregado(LocalDate.parse("2026-11-05"), "steps", 5_000, 5_000.0, 12),
                 new Agregado(LocalDate.parse("2026-11-06"), "steps", 1_000, 5_000.0, 12))));
-        when(scores.promptAprovado()).thenReturn(Optional.of(new Prompt(prompt,
+        when(scores.promptAprovado("gemini")).thenReturn(Optional.of(new Prompt(prompt,
                 arquivo.getContentAsString(java.nio.charset.StandardCharsets.UTF_8))));
         when(perfil.buscar(idoso)).thenReturn(Optional.of(new PerfilScore.Perfil(82, List.of("diabetes"))));
         when(scores.reservarChamada(eq(idoso), eq(prompt), eq("gemini"), anyLong(), anyLong()))
@@ -95,7 +95,7 @@ class CalcularScoreTest {
 
     @Test
     void promptSemAprovacaoNaoChegaAoModelo() {
-        when(scores.promptAprovado()).thenReturn(Optional.empty());
+        when(scores.promptAprovado("gemini")).thenReturn(Optional.empty());
         calcular.calcular(trabalho);
         verify(ia, never()).gerar(any());
     }
