@@ -1,0 +1,4 @@
+Calcule um Score de risco de 0 a 100 a partir dos dados agregados fornecidos.
+Use a linha de base individual e considere o contexto clínico apenas quando informado.
+Retorne somente o JSON pedido, com score e uma lista de códigos dentre os fatores observados.
+Use uma lista vazia se não houver fator sustentado pelos dados.

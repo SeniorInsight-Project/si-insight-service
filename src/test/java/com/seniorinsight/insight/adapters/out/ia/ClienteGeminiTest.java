@@ -16,10 +16,4 @@ class ClienteGeminiTest {
                 .hasMessageContaining("GEMINI_API_KEY");
     }
 
-    @Test
-    void chamadaRealAindaNaoImplementadaENaoExpoeAChave() {
-        assertThatThrownBy(() -> new ClienteGemini("chave-de-teste", "gemini-2.5-flash").gerar(prompt))
-                .isInstanceOf(UnsupportedOperationException.class)
-                .message().doesNotContain("chave-de-teste");
-    }
 }

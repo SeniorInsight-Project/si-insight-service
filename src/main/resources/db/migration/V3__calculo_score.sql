@@ -1,0 +1,29 @@
+ALTER TABLE score ADD COLUMN fatores JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE score ADD COLUMN hash_dados CHAR(64);
+ALTER TABLE score ADD COLUMN revisao_consentimento BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE chamada_ia ADD COLUMN custo_micros BIGINT NOT NULL DEFAULT 0;
+
+CREATE TABLE consentimento_score (
+    idoso_id UUID NOT NULL,
+    tipo VARCHAR(32) NOT NULL,
+    autorizado BOOLEAN NOT NULL,
+    ocorrido_em TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (idoso_id, tipo)
+);
+
+CREATE TABLE estado_score (
+    idoso_id UUID PRIMARY KEY,
+    revisao_consentimento BIGINT NOT NULL DEFAULT 0,
+    proximo_calculo TIMESTAMPTZ NOT NULL DEFAULT now(),
+    em_calculo_ate TIMESTAMPTZ
+);
+
+CREATE TABLE assinatura_score (
+    familiar_sub VARCHAR(255) PRIMARY KEY,
+    ativa BOOLEAN NOT NULL,
+    expira_em TIMESTAMPTZ,
+    ocorrido_em TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX ix_estado_score_proximo ON estado_score (proximo_calculo);
+CREATE INDEX ix_chamada_ia_criado ON chamada_ia (criado_em);
