@@ -9,6 +9,7 @@ import com.google.genai.types.GenerateContentConfig;
 import com.google.genai.types.HttpOptions;
 import com.google.genai.types.HttpRetryOptions;
 import com.google.genai.types.Schema;
+import com.google.genai.types.ThinkingConfig;
 import com.google.genai.types.Type;
 import com.seniorinsight.insight.application.porta.saida.ClienteIa;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
@@ -27,7 +28,8 @@ class ClienteGemini implements ClienteIa {
                             .items(Schema.builder().type(Type.Known.STRING).build()).build()))
             .build();
     private static final GenerateContentConfig CONFIG = GenerateContentConfig.builder()
-            .responseMimeType("application/json").responseSchema(SAIDA).maxOutputTokens(512).build();
+            .responseMimeType("application/json").responseSchema(SAIDA).maxOutputTokens(512)
+            .thinkingConfig(ThinkingConfig.builder().thinkingBudget(0).build()).build();
 
     private final String chaveApi;
     private final String modelo;
@@ -54,7 +56,8 @@ class ClienteGemini implements ClienteIa {
                     var uso = resposta.usageMetadata().orElse(null);
                     return new RespostaIa(resposta.text(), resposta.modelVersion().orElse(modelo),
                             uso == null ? 0 : uso.promptTokenCount().orElse(0),
-                            uso == null ? 0 : uso.totalTokenCount().orElse(0) - uso.promptTokenCount().orElse(0));
+                            uso == null ? 0 : Math.max(0,
+                                    uso.totalTokenCount().orElse(0) - uso.promptTokenCount().orElse(0)));
                 }
             });
         } catch (RuntimeException e) {

@@ -42,7 +42,7 @@ class ScoreJdbc implements ScoreRepositorio, ProjetarDadosScore {
         var dados = corpo.has("data") ? corpo.path("data") : corpo;
         switch (evento.tipo()) {
             case "consent.changed" -> projetarConsentimento(corpo, dados);
-            case "telemetry.ingested" -> projetarAgregados(corpo, dados);
+            case "telemetry.ingested" -> projetarAgregados(corpo, dados, evento.publicadoEm());
             case "subscription.changed" -> projetarAssinatura(corpo, dados);
             default -> { }
         }
@@ -58,7 +58,12 @@ class ScoreJdbc implements ScoreRepositorio, ProjetarDadosScore {
             throw new IllegalArgumentException("Consentimento sem estado");
         }
         bloquear(id);
+        if (excluido("I:" + id)) {
+            return;
+        }
         boolean autorizado = dados.path("autorizado").asBoolean();
+        Boolean estadoAnterior = jdbc.query("SELECT autorizado FROM consentimento_score WHERE idoso_id = ? AND tipo = ?",
+                (rs, row) -> rs.getBoolean(1), id, tipo).stream().findFirst().orElse(null);
         int atualizado = jdbc.update("""
                 INSERT INTO consentimento_score (idoso_id, tipo, autorizado, ocorrido_em) VALUES (?, ?, ?, ?)
                 ON CONFLICT (idoso_id, tipo) DO UPDATE SET autorizado = EXCLUDED.autorizado,
@@ -67,7 +72,7 @@ class ScoreJdbc implements ScoreRepositorio, ProjetarDadosScore {
                     OR (consentimento_score.ocorrido_em = EXCLUDED.ocorrido_em
                         AND consentimento_score.autorizado AND NOT EXCLUDED.autorizado)
                 """, id, tipo, autorizado, OffsetDateTime.parse(corpo.path("time").asText()));
-        if (atualizado == 0) {
+        if (atualizado == 0 || Boolean.valueOf(autorizado).equals(estadoAnterior)) {
             return;
         }
         for (var metrica : TIPOS.entrySet()) {
@@ -82,14 +87,17 @@ class ScoreJdbc implements ScoreRepositorio, ProjetarDadosScore {
                 """, id);
     }
 
-    private void projetarAgregados(JsonNode corpo, JsonNode dados) {
-        if (!dados.path("agregados").isArray()) {
+    private void projetarAgregados(JsonNode corpo, JsonNode dados, Instant publicadoEm) {
+        if (!dados.path("agregados").isArray() || (!corpo.has("time") && publicadoEm == null)) {
             return;
         }
         UUID id = UUID.fromString(dados.path("idosoId").asText());
         bloquear(id);
+        if (excluido("I:" + id)) {
+            return;
+        }
         var horario = corpo.has("time") ? OffsetDateTime.parse(corpo.path("time").asText())
-                : OffsetDateTime.now(ZoneOffset.UTC);
+                : publicadoEm.atOffset(ZoneOffset.UTC);
         var autorizados = contexto(id).tipos();
         for (JsonNode item : dados.path("agregados")) {
             String metrica = item.path("tipo").asText();
@@ -103,21 +111,24 @@ class ScoreJdbc implements ScoreRepositorio, ProjetarDadosScore {
             if (!item.path(campo).isNumber() || !Double.isFinite(item.path(campo).asDouble())) {
                 throw new IllegalArgumentException("Agregado sem valor válido");
             }
+            var cobertura = item.path("horasComDados");
+            int horas = cobertura.isIntegralNumber() && cobertura.canConvertToInt() ? cobertura.intValue() : 0;
             var agregado = new Agregado(dia, metrica, item.path(campo).asDouble(),
                     item.path("linhaBase14Dias").isNumber() ? item.path("linhaBase14Dias").asDouble() : null,
-                    Math.clamp(item.path("horasComDados").asInt(0), 0, 25));
+                    horas >= 0 && horas <= 25 ? horas : 0);
             boolean relevante = agregado.linhaBase14Dias() != null && agregado.linhaBase14Dias() > 0
                     && Math.abs(agregado.valor() / agregado.linhaBase14Dias() - 1) >= 0.2;
             int inserido = jdbc.update("""
                     INSERT INTO projecao_agregado (idoso_id, metrica, periodo_inicio, periodo_fim, valores, atualizado_em)
                     SELECT ?, ?, ?, ?, CAST(? AS jsonb), ?
                     WHERE EXISTS (SELECT 1 FROM consentimento_score WHERE idoso_id = ? AND tipo = ?
-                        AND autorizado AND ocorrido_em <= ?)
+                        AND autorizado AND ocorrido_em <= ?
+                        AND (ocorrido_em AT TIME ZONE 'America/Sao_Paulo')::date < CAST(? AS date))
                     ON CONFLICT (idoso_id, metrica, periodo_inicio) DO UPDATE SET valores = EXCLUDED.valores,
                         atualizado_em = EXCLUDED.atualizado_em
                     WHERE projecao_agregado.atualizado_em <= EXCLUDED.atualizado_em
                         AND projecao_agregado.valores IS DISTINCT FROM EXCLUDED.valores
-                    """, id, metrica, inicio, inicio.plusDays(1), escrever(agregado), horario, id, tipo, horario);
+                    """, id, metrica, inicio, inicio.plusDays(1), escrever(agregado), horario, id, tipo, horario, dia);
             if (inserido > 0 && relevante) {
                 jdbc.update("UPDATE estado_score SET proximo_calculo = LEAST(proximo_calculo, now()) WHERE idoso_id = ?", id);
             }
@@ -127,6 +138,10 @@ class ScoreJdbc implements ScoreRepositorio, ProjetarDadosScore {
     private void projetarAssinatura(JsonNode corpo, JsonNode dados) {
         String sub = dados.path("familiarSub").asText();
         if (sub.isBlank() || !dados.path("ativa").isBoolean() || !corpo.has("time")) {
+            return;
+        }
+        bloquearChave("F:" + sub);
+        if (excluido("F:" + sub)) {
             return;
         }
         String expira = dados.path("expiraEm").asText("");
@@ -198,14 +213,20 @@ class ScoreJdbc implements ScoreRepositorio, ProjetarDadosScore {
     @Override
     @Transactional
     public Optional<UUID> reservarChamada(UUID idosoId, UUID promptId, String modelo, long teto, long reserva) {
-        jdbc.query("SELECT pg_advisory_xact_lock(hashtextextended('insight:orcamento', 0))", rs -> null);
+        if (reserva > teto || jdbc.update("""
+                INSERT INTO orcamento_ia (dia, reservado_micros)
+                VALUES ((now() AT TIME ZONE 'UTC')::date, ?)
+                ON CONFLICT (dia) DO UPDATE
+                  SET reservado_micros = orcamento_ia.reservado_micros + EXCLUDED.reservado_micros
+                WHERE orcamento_ia.reservado_micros <= ? - EXCLUDED.reservado_micros
+                """, reserva, teto) == 0) {
+            return Optional.empty();
+        }
         return jdbc.query("""
                 INSERT INTO chamada_ia (idoso_id, versao_prompt_id, modelo, status, custo_micros)
-                SELECT ?, ?, ?, 'ERRO', ?
-                WHERE COALESCE((SELECT SUM(custo_micros) FROM chamada_ia
-                    WHERE criado_em >= date_trunc('day', now(), 'UTC')), 0) + ? <= ?
+                VALUES (?, ?, ?, 'ERRO', ?)
                 RETURNING id
-                """, (rs, row) -> rs.getObject(1, UUID.class), idosoId, promptId, modelo, reserva, reserva, teto)
+                """, (rs, row) -> rs.getObject(1, UUID.class), idosoId, promptId, modelo, reserva)
                 .stream().findFirst();
     }
 
@@ -242,7 +263,17 @@ class ScoreJdbc implements ScoreRepositorio, ProjetarDadosScore {
 
     @Override
     public void bloquear(UUID idosoId) {
-        jdbc.query("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", rs -> null, "I:" + idosoId);
+        bloquearChave("I:" + idosoId);
+    }
+
+    private void bloquearChave(String chave) {
+        jdbc.query("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", rs -> null, chave);
+    }
+
+    private boolean excluido(String chave) {
+        return Boolean.TRUE.equals(jdbc.queryForObject("""
+                SELECT EXISTS (SELECT 1 FROM titular_excluido WHERE chave = sha256(convert_to(?, 'UTF8')))
+                """, Boolean.class, chave));
     }
 
     private JsonNode ler(String valor) {

@@ -27,3 +27,20 @@ CREATE TABLE assinatura_score (
 
 CREATE INDEX ix_estado_score_proximo ON estado_score (proximo_calculo);
 CREATE INDEX ix_chamada_ia_criado ON chamada_ia (criado_em);
+
+CREATE TABLE orcamento_ia (
+    dia DATE PRIMARY KEY,
+    reservado_micros BIGINT NOT NULL CHECK (reservado_micros >= 0)
+);
+
+CREATE TRIGGER impedir_recriacao_consentimento_score
+    BEFORE INSERT OR UPDATE OF idoso_id ON consentimento_score
+    FOR EACH ROW EXECUTE FUNCTION impedir_recriacao_titular_excluido('idoso_id', 'I:');
+
+CREATE TRIGGER impedir_recriacao_estado_score
+    BEFORE INSERT OR UPDATE OF idoso_id ON estado_score
+    FOR EACH ROW EXECUTE FUNCTION impedir_recriacao_titular_excluido('idoso_id', 'I:');
+
+CREATE TRIGGER impedir_recriacao_assinatura_score
+    BEFORE INSERT OR UPDATE OF familiar_sub ON assinatura_score
+    FOR EACH ROW EXECUTE FUNCTION impedir_recriacao_titular_excluido('familiar_sub', 'F:');
