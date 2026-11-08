@@ -1,5 +1,15 @@
 # si-insight-service
 
+## Exclusão do titular
+
+A exclusão de um idoso remove Scores, chamadas de IA, projeções e o semáforo
+no Redis. A exclusão de um familiar remove somente a projeção de acesso dele.
+A confirmação por protocolo só entra na outbox depois dessas etapas.
+
+Os eventos `lgpd.erasure.requested` e `lgpd.erasure.completed` seguem o
+contrato do si-contracts. Uma impressão do identificador impede que mensagens
+antigas recriem os dados excluídos.
+
 Serviço de insights: pseudonimiza os agregados, chama a API do Gemini só com prompts aprovados, valida a resposta e calcula a faixa do Score com histerese (RN-008). Consome `telemetry.ingested`, `consent.changed` e `subscription.changed`; publica `insight.score.changed`.
 
 Parte do SeniorInsight — ver o Documento de Arquitetura de Software (seção 6) para as convenções.

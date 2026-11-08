@@ -10,6 +10,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import com.seniorinsight.insight.domain.evento.ExclusaoConcluida;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.AmqpException;
@@ -113,9 +115,20 @@ class RelayOutbox {
                 evento.getId(), evento.getTipoEvento(), evento.getTentativas(), motivo);
     }
 
+    private static String envelopeExclusao(OutboxEvento evento) {
+        return """
+                {"specversion":"1.0","id":"%s","source":"/insight-service","type":"lgpd.erasure.completed",
+                 "time":"%s","datacontenttype":"application/json",
+                 "dataschema":"https://raw.githubusercontent.com/SeniorInsight-Project/si-contracts/main/events/lgpd.erasure.completed.v1.json",
+                 "subject":"%s","data":%s}
+                """.formatted(evento.getId(), evento.getCriadoEm(), evento.getAgregadoId(), evento.getPayload());
+    }
+
     private static Message paraMensagem(OutboxEvento evento) {
-        return MessageBuilder.withBody(evento.getPayload().getBytes(StandardCharsets.UTF_8))
-                .setContentType(MessageProperties.CONTENT_TYPE_JSON)
+        boolean exclusao = ExclusaoConcluida.TIPO.equals(evento.getTipoEvento());
+        return MessageBuilder.withBody((exclusao ? envelopeExclusao(evento) : evento.getPayload())
+                        .getBytes(StandardCharsets.UTF_8))
+                .setContentType(exclusao ? "application/cloudevents+json" : MessageProperties.CONTENT_TYPE_JSON)
                 .setContentEncoding(StandardCharsets.UTF_8.name())
                 .setDeliveryMode(MessageDeliveryMode.PERSISTENT)
                 .setMessageId(evento.getId().toString())
