@@ -29,7 +29,7 @@ public class TratarExclusao {
             return;
         }
         boolean idoso = pedido.idoso();
-        repositorio.excluir(pedido.titular(), idoso);
+        repositorio.excluir(pedido.titular(), pedido.sub(), idoso);
         if (idoso) {
             cache.remover(pedido.titular());
         }

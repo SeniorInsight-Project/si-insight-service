@@ -6,7 +6,7 @@ public interface ExclusaoDadosRepositorio {
 
     boolean reservar(UUID protocolo);
 
-    void excluir(UUID titularId, boolean idoso);
+    void excluir(UUID titularId, String titularSub, boolean idoso);
 
     boolean idosoExcluido(UUID idosoId);
 
