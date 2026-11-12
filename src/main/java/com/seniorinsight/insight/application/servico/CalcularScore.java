@@ -2,18 +2,9 @@ package com.seniorinsight.insight.application.servico;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
-import java.util.HexFormat;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
 import java.util.UUID;
-import java.util.stream.StreamSupport;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.seniorinsight.insight.application.porta.saida.ClienteIa;
 import com.seniorinsight.insight.application.porta.saida.ClienteIa.PromptIa;
@@ -21,12 +12,8 @@ import com.seniorinsight.insight.application.porta.saida.ClienteIa.RespostaIa;
 import com.seniorinsight.insight.application.porta.saida.PerfilScore;
 import com.seniorinsight.insight.application.porta.saida.PublicadorEventos;
 import com.seniorinsight.insight.application.porta.saida.ScoreRepositorio;
-import com.seniorinsight.insight.application.porta.saida.ScoreRepositorio.Score;
 import com.seniorinsight.insight.application.porta.saida.ScoreRepositorio.Trabalho;
-import com.seniorinsight.insight.domain.evento.FaixaScoreAlterada;
 import com.seniorinsight.insight.domain.semaforo.MedidasScore;
-import com.seniorinsight.insight.domain.semaforo.MedidasScore.Agregado;
-import com.seniorinsight.insight.domain.semaforo.RegrasScore;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
@@ -37,9 +24,9 @@ public class CalcularScore {
     private final ScoreRepositorio scores;
     private final PerfilScore perfis;
     private final ClienteIa ia;
-    private final PublicadorEventos eventos;
+    private final PersistirScore persistencia;
     private final TransactionOperations transacoes;
-    private final ObjectMapper json;
+    private final FormatoScoreIa formato;
     private final String promptVersionado;
     private final String modelo;
     private final long teto;
@@ -56,9 +43,9 @@ public class CalcularScore {
         this.scores = scores;
         this.perfis = perfis;
         this.ia = ia;
-        this.eventos = eventos;
+        this.persistencia = new PersistirScore(scores, eventos, transacoes);
         this.transacoes = transacoes;
-        this.json = json;
+        this.formato = new FormatoScoreIa(json);
         this.promptVersionado = prompt.getContentAsString(StandardCharsets.UTF_8).strip();
         this.modelo = modelo;
         this.teto = teto;
@@ -92,7 +79,7 @@ public class CalcularScore {
         }
 
         var evidencias = MedidasScore.explicacoes(contexto.agregados());
-        String dados = serializar(new EntradaIa(perfil.get(), contexto.agregados(), List.copyOf(evidencias.keySet())));
+        String dados = formato.montar(perfil.get(), contexto.agregados(), evidencias.keySet());
         String conteudo = promptVersionado + "\n" + dados;
         int bytes = conteudo.getBytes(StandardCharsets.UTF_8).length;
         if (bytes > 64_000) {
@@ -123,76 +110,15 @@ public class CalcularScore {
                 continue;
             }
 
-            Saida saida = validar(resposta, evidencias);
+            var saida = formato.validar(resposta, evidencias);
             long custo = custo(Math.max(0, resposta.tokensEntrada()), Math.max(0, resposta.tokensSaida()));
             scores.registrarChamada(chamada.get(), resposta.modelo(),
                     saida == null ? "RESPOSTA_INVALIDA" : "SUCESSO", resposta.tokensEntrada(),
                     resposta.tokensSaida(), latencia(inicio), custo);
             if (saida != null) {
-                guardar(trabalho, saida, chamada.get(), hash(dados));
+                persistencia.guardar(trabalho, saida, chamada.get(), FormatoScoreIa.hash(dados));
             }
             return;
-        }
-    }
-
-    private void guardar(Trabalho trabalho, Saida saida, UUID chamada, String hash) {
-        transacoes.executeWithoutResult(status -> {
-            UUID id = trabalho.idosoId();
-            scores.bloquear(id);
-            if (scores.contexto(id).revisao() != trabalho.revisao()) {
-                return;
-            }
-            Score anterior = scores.recente(id).orElse(null);
-            var faixaAnterior = anterior == null ? null : anterior.faixa();
-            Double valorAnterior = anterior == null || anterior.revisao() != trabalho.revisao()
-                    ? null : anterior.valor();
-            var faixa = RegrasScore.calcular(saida.valor(), faixaAnterior, valorAnterior);
-            Instant agora = Instant.now();
-            scores.guardar(id, new Score(saida.valor(), faixa, agora, saida.fatores(), trabalho.revisao()), chamada, hash);
-            if (faixa != faixaAnterior) {
-                eventos.publicar(new FaixaScoreAlterada(id, faixaAnterior, faixa, agora));
-            }
-        });
-    }
-
-    private Saida validar(RespostaIa resposta, Map<String, String> evidencias) {
-        if (resposta.conteudo() == null || resposta.conteudo().length() > 4096) {
-            return null;
-        }
-        try {
-            var no = json.reader().with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS,
-                            DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
-                    .readTree(resposta.conteudo());
-            var valor = no.path("score");
-            var fatores = no.path("fatores");
-            if (no.size() != 2 || !valor.isNumber() || !Double.isFinite(valor.asDouble())
-                    || valor.asDouble() < 0 || valor.asDouble() > 100 || !fatores.isArray() || fatores.size() > 4) {
-                return null;
-            }
-            var explicacoes = StreamSupport.stream(fatores.spliterator(), false)
-                    .map(f -> f.isTextual() ? evidencias.get(f.asText()) : null).toList();
-            return explicacoes.stream().anyMatch(Objects::isNull)
-                    || explicacoes.stream().distinct().count() != explicacoes.size()
-                    ? null : new Saida(valor.asDouble(), explicacoes);
-        } catch (JsonProcessingException falha) {
-            return null;
-        }
-    }
-
-    private String serializar(Object objeto) {
-        try {
-            return json.writeValueAsString(objeto);
-        } catch (JsonProcessingException falha) {
-            throw new IllegalStateException("Contexto do Score inválido");
-        }
-    }
-
-    private static String hash(String dados) {
-        try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-                    .digest(dados.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException falha) {
-            throw new IllegalStateException(falha);
         }
     }
 
@@ -215,9 +141,4 @@ public class CalcularScore {
         }
     }
 
-    private record Saida(double valor, List<String> fatores) {
-    }
-
-    private record EntradaIa(PerfilScore.Perfil perfil, List<Agregado> agregados, List<String> fatoresPermitidos) {
-    }
 }

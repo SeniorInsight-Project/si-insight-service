@@ -26,7 +26,10 @@ class ConsumidorEventos {
 
     private final ProcessarEventoRecebido processar;
 
-    ConsumidorEventos(ProcessarEventoRecebido processar) {
+    private final PedidoExclusaoJson pedidos;
+
+    ConsumidorEventos(ProcessarEventoRecebido processar, PedidoExclusaoJson pedidos) {
+        this.pedidos = pedidos;
         this.processar = processar;
     }
 
@@ -35,7 +38,12 @@ class ConsumidorEventos {
         MessageProperties propriedades = mensagem.getMessageProperties();
         long tag = propriedades.getDeliveryTag();
         try {
-            processar.processar(paraEvento(propriedades, mensagem.getBody()));
+            var evento = paraEvento(propriedades, mensagem.getBody());
+            if (PedidoExclusaoJson.TIPO.equals(evento.tipo())) {
+                pedidos.tratar(evento.id(), evento.payload());
+            } else {
+                processar.processar(evento);
+            }
             canal.basicAck(tag, false);
         } catch (RuntimeException e) {
             log.error("Evento {} ({}) enviado para a dead-letter: {}",

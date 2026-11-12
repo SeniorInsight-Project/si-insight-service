@@ -79,6 +79,10 @@ insight:
     # Só por variável de ambiente (Secret Manager em produção). Vazia: o adaptador recusa a chamada.
     api-key: ${GEMINI_API_KEY:}
     modelo: ${GEMINI_MODEL:gemini-2.5-flash}
+    circuito:
+      janela: 5
+      limiar: 60
+      espera: PT5M
     habilitado: ${INSIGHT_GEMINI_ENABLED:false}
     intervalo-job: ${INSIGHT_SCORE_INTERVALO:PT15M}
     teto-diario-micros: ${INSIGHT_GEMINI_TETO_DIARIO_MICROS:0}

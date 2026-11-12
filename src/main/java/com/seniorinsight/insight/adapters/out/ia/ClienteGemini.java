@@ -14,6 +14,9 @@ import com.google.genai.types.Type;
 import com.seniorinsight.insight.application.porta.saida.ClienteIa;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import jakarta.annotation.PreDestroy;
+import java.util.function.Function;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -31,38 +34,56 @@ class ClienteGemini implements ClienteIa {
             .responseMimeType("application/json").responseSchema(SAIDA).maxOutputTokens(512)
             .thinkingConfig(ThinkingConfig.builder().thinkingBudget(0).build()).build();
 
-    private final String chaveApi;
-    private final String modelo;
-    private final CircuitBreaker circuito = CircuitBreaker.of("gemini", CircuitBreakerConfig.custom()
-            .slidingWindowSize(5).minimumNumberOfCalls(5).failureRateThreshold(60)
-            .waitDurationInOpenState(Duration.ofMinutes(5)).build());
+    private final Client cliente;
+    private final Function<PromptIa, RespostaIa> chamada;
+    private final CircuitBreaker circuito;
 
+    @Autowired
     ClienteGemini(@Value("${insight.gemini.api-key}") String chaveApi,
-                  @Value("${insight.gemini.modelo}") String modelo) {
-        this.chaveApi = chaveApi;
-        this.modelo = modelo;
+                  @Value("${insight.gemini.modelo}") String modelo,
+                  @Value("${insight.gemini.circuito.janela}") int janela,
+                  @Value("${insight.gemini.circuito.limiar}") float limiar,
+                  @Value("${insight.gemini.circuito.espera}") Duration espera) {
+        this.cliente = chaveApi.isBlank() ? null : Client.builder().apiKey(chaveApi)
+                .httpOptions(HttpOptions.builder().timeout(30_000)
+                        .retryOptions(HttpRetryOptions.builder().attempts(1).build()).build()).build();
+        this.chamada = cliente == null ? null : prompt -> consultar(cliente, modelo, prompt);
+        this.circuito = CircuitBreaker.of("gemini", CircuitBreakerConfig.custom()
+                .slidingWindowSize(janela).minimumNumberOfCalls(janela).failureRateThreshold(limiar)
+                .waitDurationInOpenState(espera).build());
+    }
+
+    ClienteGemini(Function<PromptIa, RespostaIa> chamada, CircuitBreaker circuito) {
+        this.cliente = null;
+        this.chamada = chamada;
+        this.circuito = circuito;
+    }
+
+    @PreDestroy
+    void fechar() {
+        if (cliente != null) {
+            cliente.close();
+        }
     }
 
     @Override
     public RespostaIa gerar(PromptIa prompt) {
-        if (chaveApi == null || chaveApi.isBlank()) {
+        if (chamada == null) {
             throw new IllegalStateException("GEMINI_API_KEY não configurada");
         }
         try {
-            return circuito.executeSupplier(() -> {
-                try (Client cliente = Client.builder().apiKey(chaveApi).httpOptions(HttpOptions.builder()
-                        .timeout(30_000).retryOptions(HttpRetryOptions.builder().attempts(1).build()).build()).build()) {
-                    var resposta = cliente.models.generateContent(modelo, prompt.conteudo(), CONFIG);
-                    var uso = resposta.usageMetadata().orElse(null);
-                    return new RespostaIa(resposta.text(), resposta.modelVersion().orElse(modelo),
-                            uso == null ? 0 : uso.promptTokenCount().orElse(0),
-                            uso == null ? 0 : Math.max(0,
-                                    uso.totalTokenCount().orElse(0) - uso.promptTokenCount().orElse(0)));
-                }
-            });
+            return circuito.executeSupplier(() -> chamada.apply(prompt));
         } catch (RuntimeException e) {
             // Exceções do provedor podem incluir partes da solicitação ou credenciais.
             throw new IllegalStateException("Gemini indisponível");
         }
+    }
+
+    private static RespostaIa consultar(Client cliente, String modelo, PromptIa prompt) {
+        var resposta = cliente.models.generateContent(modelo, prompt.conteudo(), CONFIG);
+        var uso = resposta.usageMetadata().orElse(null);
+        int entrada = uso == null ? 0 : uso.promptTokenCount().orElse(0);
+        int total = uso == null ? 0 : uso.totalTokenCount().orElse(0);
+        return new RespostaIa(resposta.text(), resposta.modelVersion().orElse(modelo), entrada, Math.max(0, total - entrada));
     }
 }

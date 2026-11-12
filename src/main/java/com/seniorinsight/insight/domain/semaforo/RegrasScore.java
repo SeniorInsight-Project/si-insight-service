@@ -1,6 +1,8 @@
 package com.seniorinsight.insight.domain.semaforo;
 
 public final class RegrasScore {
+    private static final int LIMITE_ATENCAO = 40;
+    private static final int LIMITE_CRITICO = 70;
     private RegrasScore() {
     }
 
@@ -9,15 +11,33 @@ public final class RegrasScore {
             throw new IllegalArgumentException("Score fora da faixa");
         }
         Semaforo nova = faixa(valor);
-        if (anterior != null && nova.ordinal() < anterior.ordinal()) {
-            Semaforo anteriorBruta = ultimoValor == null ? anterior : faixa(ultimoValor);
-            Semaforo menorConfirmada = anteriorBruta.ordinal() > nova.ordinal() ? anteriorBruta : nova;
-            return menorConfirmada.ordinal() < anterior.ordinal() ? menorConfirmada : anterior;
+        if (anterior == null || nivel(nova) >= nivel(anterior)) {
+            return nova;
         }
-        return nova;
+        Semaforo ultima = ultimoValor == null ? anterior : faixa(ultimoValor);
+        return confirmadaPorDuasLeituras(nova, ultima, anterior);
+    }
+
+    private static Semaforo confirmadaPorDuasLeituras(Semaforo nova, Semaforo ultima, Semaforo atual) {
+        Semaforo maiorRisco = nivel(nova) >= nivel(ultima) ? nova : ultima;
+        return nivel(maiorRisco) < nivel(atual) ? maiorRisco : atual;
+    }
+
+    private static int nivel(Semaforo faixa) {
+        return switch (faixa) {
+            case VERDE -> 0;
+            case AMARELO -> 1;
+            case VERMELHO -> 2;
+        };
     }
 
     private static Semaforo faixa(double valor) {
-        return valor < 40 ? Semaforo.VERDE : valor < 70 ? Semaforo.AMARELO : Semaforo.VERMELHO;
+        if (valor >= LIMITE_CRITICO) {
+            return Semaforo.VERMELHO;
+        }
+        if (valor >= LIMITE_ATENCAO) {
+            return Semaforo.AMARELO;
+        }
+        return Semaforo.VERDE;
     }
 }
