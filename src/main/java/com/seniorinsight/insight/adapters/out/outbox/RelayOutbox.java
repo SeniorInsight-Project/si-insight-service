@@ -10,13 +10,15 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageBuilder;
 import org.springframework.amqp.core.MessageDeliveryMode;
-import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
@@ -41,15 +43,17 @@ class RelayOutbox {
 
     private final OutboxEventoRepository repositorio;
     private final RabbitTemplate rabbitTemplate;
+    private final ObjectMapper json;
     private final int tamanhoLote;
     private final Duration timeoutConfirmacao;
 
     RelayOutbox(OutboxEventoRepository repositorio,
-                RabbitTemplate rabbitTemplate,
+                RabbitTemplate rabbitTemplate, ObjectMapper json,
                 @Value("${insight.outbox.relay.tamanho-lote}") int tamanhoLote,
                 @Value("${insight.outbox.relay.timeout-confirmacao}") Duration timeoutConfirmacao) {
         this.repositorio = repositorio;
         this.rabbitTemplate = rabbitTemplate;
+        this.json = json;
         this.tamanhoLote = tamanhoLote;
         this.timeoutConfirmacao = timeoutConfirmacao;
     }
@@ -113,9 +117,29 @@ class RelayOutbox {
                 evento.getId(), evento.getTipoEvento(), evento.getTentativas(), motivo);
     }
 
-    private static Message paraMensagem(OutboxEvento evento) {
-        return MessageBuilder.withBody(evento.getPayload().getBytes(StandardCharsets.UTF_8))
-                .setContentType(MessageProperties.CONTENT_TYPE_JSON)
+    private String envelope(OutboxEvento evento) {
+        var no = json.createObjectNode();
+        String tipo = evento.getTipoEvento();
+        no.put("specversion", "1.0");
+        no.put("id", evento.getId().toString());
+        no.put("source", "/" + APP_ID);
+        no.put("type", tipo);
+        no.put("time", evento.getCriadoEm().toString());
+        no.put("datacontenttype", "application/json");
+        no.put("dataschema", "https://raw.githubusercontent.com/SeniorInsight-Project/si-contracts/main/events/"
+                + tipo + ".v1.json");
+        no.put("subject", evento.getAgregadoId().toString());
+        try {
+            no.set("data", json.readTree(evento.getPayload()));
+            return json.writeValueAsString(no);
+        } catch (JsonProcessingException erro) {
+            throw new IllegalStateException("Payload inválido na outbox", erro);
+        }
+    }
+
+    private Message paraMensagem(OutboxEvento evento) {
+        return MessageBuilder.withBody(envelope(evento).getBytes(StandardCharsets.UTF_8))
+                .setContentType("application/cloudevents+json")
                 .setContentEncoding(StandardCharsets.UTF_8.name())
                 .setDeliveryMode(MessageDeliveryMode.PERSISTENT)
                 .setMessageId(evento.getId().toString())

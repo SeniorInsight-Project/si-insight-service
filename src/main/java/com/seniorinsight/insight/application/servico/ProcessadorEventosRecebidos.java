@@ -8,9 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Deduplica pelo id do evento e, na mesma transação, aplica o efeito. Por enquanto só registra o recebimento: a
- * atualização das projeções de agregados ({@code telemetry.ingested}) e de direito de acesso ({@code consent.changed},
- * {@code subscription.changed}) entra nos próximos cards.
+ * Deduplica pelo id do evento e, na mesma transação, aplica o efeito da exclusão do titular.
  */
 @Service
 class ProcessadorEventosRecebidos implements ProcessarEventoRecebido {
