@@ -1,7 +1,6 @@
 package com.seniorinsight.insight.application.servico;
 
 import com.seniorinsight.insight.application.porta.entrada.ProcessarEventoRecebido;
-import com.seniorinsight.insight.application.lgpd.TratarExclusao;
 import com.seniorinsight.insight.application.porta.saida.RegistroEventosRecebidos;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,11 +16,9 @@ class ProcessadorEventosRecebidos implements ProcessarEventoRecebido {
     private static final Logger log = LoggerFactory.getLogger(ProcessadorEventosRecebidos.class);
 
     private final RegistroEventosRecebidos registro;
-    private final TratarExclusao exclusao;
 
-    ProcessadorEventosRecebidos(RegistroEventosRecebidos registro, TratarExclusao exclusao) {
+    ProcessadorEventosRecebidos(RegistroEventosRecebidos registro) {
         this.registro = registro;
-        this.exclusao = exclusao;
     }
 
     @Override
@@ -30,9 +27,6 @@ class ProcessadorEventosRecebidos implements ProcessarEventoRecebido {
         if (!registro.registrarSeNovo(evento.id(), evento.tipo())) {
             log.info("Evento {} ({}) já processado: ignorado", evento.id(), evento.tipo());
             return false;
-        }
-        if (TratarExclusao.TIPO.equals(evento.tipo())) {
-            exclusao.tratar(evento.id(), evento.payload());
         }
         log.debug("Evento {} ({}) recebido", evento.id(), evento.tipo());
         return true;

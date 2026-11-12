@@ -73,13 +73,6 @@ class ExclusaoIntegracaoTest {
     }
 
     private void enviar(UUID protocolo, UUID titular, String tipo, String sub) {
-        UUID mensagem = UUID.randomUUID();
-        String corpo = """
-                {"specversion":"1.0","id":"%s","source":"/report-service","type":"lgpd.erasure.requested",
-                 "time":"2026-11-08T15:30:00Z","datacontenttype":"application/json",
-                 "dataschema":"https://raw.githubusercontent.com/SeniorInsight-Project/si-contracts/main/events/lgpd.erasure.requested.v1.json",
-                 "subject":"%s","data":{"protocolo":"%s","titularId":"%s","tipoTitular":"%s","titularSub":"%s"}}
-                """.formatted(mensagem, protocolo, protocolo, titular, tipo, sub);
-        tratador.tratar(mensagem, corpo);
+        tratador.tratar(new TratarExclusao.Pedido(protocolo, titular, sub, "IDOSO".equals(tipo)));
     }
 }

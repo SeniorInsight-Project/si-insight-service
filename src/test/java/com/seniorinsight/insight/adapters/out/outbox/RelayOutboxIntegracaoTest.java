@@ -61,11 +61,14 @@ class RelayOutboxIntegracaoTest {
         assertThat(propriedades.getReceivedExchange()).isEqualTo("si.events");
         assertThat(propriedades.getReceivedRoutingKey()).isEqualTo("insight.score.changed");
         assertThat(propriedades.getType()).isEqualTo("insight.score.changed");
-        assertThat(propriedades.getContentType()).isEqualTo(MessageProperties.CONTENT_TYPE_JSON);
+        assertThat(propriedades.getContentType()).isEqualTo("application/cloudevents+json");
         assertThat(propriedades.getAppId()).isEqualTo("insight-service");
         assertThat(propriedades.<String>getHeader("tipo_agregado")).isEqualTo("score");
         assertThat(propriedades.<String>getHeader("agregado_id")).isEqualTo(idosoId.toString());
-        assertThat(objectMapper.readTree(mensagem.getBody()))
+        var envelope = objectMapper.readTree(mensagem.getBody());
+        assertThat(envelope.path("id").asText()).isEqualTo(propriedades.getMessageId());
+        assertThat(envelope.path("type").asText()).isEqualTo(propriedades.getReceivedRoutingKey());
+        assertThat(envelope.path("data"))
                 .isEqualTo(objectMapper.createObjectNode().put("idosoId", idosoId.toString()).put("faixa", "VERDE"));
 
         UUID eventoId = UUID.fromString(propriedades.getMessageId());
