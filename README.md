@@ -12,6 +12,22 @@ antigas recriem os dados excluídos.
 
 Serviço de insights: pseudonimiza os agregados, chama a API do Gemini só com prompts aprovados, valida a resposta e calcula a faixa do Score com histerese (RN-008). Consome `telemetry.ingested`, `consent.changed` e `subscription.changed`; publica `insight.score.changed`.
 
+## Score de bem-estar
+
+O app acessa `GET /api/v1/insight/idosos/{idosoId}/score-risco/recente` pelo gateway.
+O Insight confirma o vínculo no Care e usa a projeção de Premium ou trial antes de consultar a faixa no Redis.
+A resposta omite a pontuação quando faltam três dias com 12 horas observadas ou quando a autorização foi revogada.
+
+Para integrar os serviços em homologação:
+
+- Telemetria envia `horasComDados` por agregado diário em `telemetry.ingested`. Uma hora conta quando contém uma leitura do sinal. A cobertura desconhecida conta como zero.
+- Billing envia `subscription.changed` com `time` e `data` contendo `familiarSub` (sub do Keycloak), `ativa` (Premium ou trial) e `expiraEm` (opcional para direito sem data de término).
+- Care atende `GET /internal/idosos/{id}/vinculo/{sub}` com o token do familiar e `GET /internal/idosos/{id}/contexto-score` com o token de serviço. O segundo endpoint deve fornecer somente `idade` e `comorbidades`. Configure `CARE_SERVICE_URL` e `INSIGHT_CARE_TOKEN_URL`, `INSIGHT_CARE_CLIENT_ID`, `INSIGHT_CARE_CLIENT_SECRET`.
+
+O job fica desligado por padrão. A versão em `src/main/resources/prompts/score-v1.txt` precisa corresponder ao registro `score`/1 em `versao_prompt` aprovado pelo consultor, com autoria, data e `modelo_aprovado`. Para habilitar, configure `INSIGHT_GEMINI_ENABLED`, `GEMINI_API_KEY`, o teto diário em `INSIGHT_GEMINI_TETO_DIARIO_MICROS` e as tarifas por milhão de tokens em `INSIGHT_GEMINI_PRECO_ENTRADA` e `INSIGHT_GEMINI_PRECO_SAIDA`. Use a mesma moeda para teto e tarifas. Cada tentativa reserva o custo antes da chamada. O job antecipa um cálculo quando um novo agregado muda pelo menos 20% em relação à linha de base.
+
+Use a modalidade contratada que impede o uso dos dados enviados para treinamento, conforme RN-021.
+
 Parte do SeniorInsight — ver o Documento de Arquitetura de Software (seção 6) para as convenções.
 
 Branches: `main` (produção) e `develop` (testes, branch padrão). Trabalhe na branch criada pelo card e abra PR para `develop` — ver [CONTRIBUTING.md](CONTRIBUTING.md).

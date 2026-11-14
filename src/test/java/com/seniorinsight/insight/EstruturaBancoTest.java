@@ -22,7 +22,8 @@ class EstruturaBancoTest {
     @Test
     void flywayAplicaAsMigracoesNoSchemaInsight() {
         assertThat(flyway.info().applied()).extracting(MigrationInfo::getVersion)
-                .contains(MigrationVersion.fromVersion("1"), MigrationVersion.fromVersion("2"));
+                .contains(MigrationVersion.fromVersion("1"), MigrationVersion.fromVersion("2"),
+                        MigrationVersion.fromVersion("3"));
         assertThat(jdbc.queryForList(
                 "SELECT table_name FROM information_schema.tables WHERE table_schema = 'insight'", String.class))
                 .contains("score", "chamada_ia", "versao_prompt", "projecao_agregado", "projecao_direito_acesso",

@@ -5,12 +5,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.UUID;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.seniorinsight.insight.TesteIntegracao;
 import com.seniorinsight.insight.application.porta.saida.PublicadorEventos;
 import com.seniorinsight.insight.domain.evento.EventoDominio;
+import com.seniorinsight.insight.domain.evento.FaixaScoreAlterada;
+import com.seniorinsight.insight.domain.semaforo.Semaforo;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.AmqpAdmin;
 import org.springframework.amqp.core.BindingBuilder;
@@ -53,7 +56,9 @@ class RelayOutboxIntegracaoTest {
                 .with("insight.score.changed"));
         UUID idosoId = UUID.randomUUID();
 
-        transacao.executeWithoutResult(status -> publicador.publicar(new ScoreAlterado(idosoId, "VERDE")));
+        Instant instante = Instant.parse("2026-11-08T12:00:00Z");
+        transacao.executeWithoutResult(status -> publicador.publicar(
+                new FaixaScoreAlterada(idosoId, null, Semaforo.VERDE, instante)));
 
         Message mensagem = rabbitTemplate.receive(fila.getName(), Duration.ofSeconds(15).toMillis());
         assertThat(mensagem).as("mensagem publicada pelo relay").isNotNull();
@@ -67,9 +72,10 @@ class RelayOutboxIntegracaoTest {
         assertThat(propriedades.<String>getHeader("agregado_id")).isEqualTo(idosoId.toString());
         var envelope = objectMapper.readTree(mensagem.getBody());
         assertThat(envelope.path("id").asText()).isEqualTo(propriedades.getMessageId());
-        assertThat(envelope.path("type").asText()).isEqualTo(propriedades.getReceivedRoutingKey());
-        assertThat(envelope.path("data"))
-                .isEqualTo(objectMapper.createObjectNode().put("idosoId", idosoId.toString()).put("faixa", "VERDE"));
+        assertThat(envelope.path("type").asText()).isEqualTo("insight.score.changed");
+        assertThat(envelope.path("data")).isEqualTo(objectMapper.createObjectNode()
+                .put("idosoId", idosoId.toString()).putNull("faixaAnterior").put("faixa", "VERDE")
+                .put("calculadoEm", instante.toString()));
 
         UUID eventoId = UUID.fromString(propriedades.getMessageId());
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {

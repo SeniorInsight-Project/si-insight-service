@@ -56,12 +56,18 @@ class ExclusaoIntegracaoTest {
         UUID protocolo = UUID.randomUUID();
         jdbc.update("INSERT INTO score (idoso_id, valor, faixa) VALUES (?, 70, 'VERDE')", idoso);
         jdbc.update("INSERT INTO projecao_direito_acesso (idoso_id, familiar_id) VALUES (?, ?)", idoso, familiar);
+        jdbc.update("""
+                INSERT INTO assinatura_score (familiar_sub, ativa, ocorrido_em)
+                VALUES ('sub-familiar', true, now())
+                """);
 
         enviar(protocolo, familiar, "FAMILIAR", "sub-familiar");
 
         assertThat(jdbc.queryForList("SELECT id FROM score WHERE idoso_id = ?", UUID.class, idoso)).hasSize(1);
         assertThat(jdbc.queryForList("SELECT idoso_id FROM projecao_direito_acesso WHERE familiar_id = ?",
                 UUID.class, familiar)).isEmpty();
+        assertThat(jdbc.queryForList("SELECT familiar_sub FROM assinatura_score WHERE familiar_sub = 'sub-familiar'",
+                String.class)).isEmpty();
         confirmar(protocolo);
     }
     private void confirmar(UUID protocolo) {

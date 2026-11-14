@@ -58,6 +58,8 @@ class ConsumidorEventos {
             throw new IllegalArgumentException("mensagem sem message_id");
         }
         String tipo = propriedades.getType() != null ? propriedades.getType() : propriedades.getReceivedRoutingKey();
-        return new EventoRecebido(UUID.fromString(id), tipo, new String(corpo, StandardCharsets.UTF_8));
+        var data = propriedades.getTimestamp();
+        return new EventoRecebido(UUID.fromString(id), tipo, new String(corpo, StandardCharsets.UTF_8),
+                data == null ? null : data.toInstant());
     }
 }
