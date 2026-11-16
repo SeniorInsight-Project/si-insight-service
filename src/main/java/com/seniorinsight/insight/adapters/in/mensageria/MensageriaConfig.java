@@ -27,7 +27,8 @@ public class MensageriaConfig {
     public static final String FILA_DEAD_LETTER = "insight.q.dlq";
 
     /** Routing keys consumidas da {@code si.events}. */
-    static final List<String> EVENTOS_CONSUMIDOS = List.of("telemetry.ingested", "consent.changed", "subscription.changed");
+    static final List<String> EVENTOS_CONSUMIDOS = List.of(
+            "telemetry.ingested", "consent.changed", "subscription.changed", "lgpd.erasure.requested");
 
     @Bean
     Declarables filaInsight() {

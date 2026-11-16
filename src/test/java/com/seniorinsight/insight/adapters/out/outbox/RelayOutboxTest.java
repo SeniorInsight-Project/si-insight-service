@@ -29,7 +29,8 @@ class RelayOutboxTest {
 
     private final OutboxEventoRepository repositorio = mock(OutboxEventoRepository.class);
     private final RabbitTemplate rabbitTemplate = mock(RabbitTemplate.class);
-    private final RelayOutbox relay = new RelayOutbox(repositorio, rabbitTemplate, 100, Duration.ofMillis(200));
+    private final RelayOutbox relay = new RelayOutbox(repositorio, rabbitTemplate,
+            new com.fasterxml.jackson.databind.ObjectMapper(), 100, Duration.ofMillis(200));
 
     private OutboxEvento evento;
 

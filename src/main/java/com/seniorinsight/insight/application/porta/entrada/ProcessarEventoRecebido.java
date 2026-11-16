@@ -1,5 +1,6 @@
 package com.seniorinsight.insight.application.porta.entrada;
 
+import java.time.Instant;
 import java.util.UUID;
 
 /** Trata um evento de outro serviço recebido pela fila {@code insight.q}. */
@@ -9,6 +10,9 @@ public interface ProcessarEventoRecebido {
     boolean processar(EventoRecebido evento);
 
     /** {@code id} é o id do evento na outbox de origem ({@code message_id} da mensagem). */
-    record EventoRecebido(UUID id, String tipo, String payload) {
+    record EventoRecebido(UUID id, String tipo, String payload, Instant publicadoEm) {
+        public EventoRecebido(UUID id, String tipo, String payload) {
+            this(id, tipo, payload, Instant.now());
+        }
     }
 }
